@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ticket Check-in</title>
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  background: linear-gradient(135deg, #020617, #020617);
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card {
+  background: rgba(15, 23, 42, 0.95);
+  padding: 2.5rem;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 25px 70px rgba(0,0,0,.7);
+}
+input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+button {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: none;
+  background: #22c55e;
+  color: #022c22;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+button:disabled {
+  background: #334155;
+  color: #94a3b8;
+}
+.status {
+  margin-top: 1.2rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.valid { color: #4ade80; }
+.used { color: #facc15; }
+.invalid { color: #f87171; }
+.ticket-box {
+  margin-top: 1rem;
+  background: rgba(30,41,59,.6);
+  padding: 1rem;
+  border-radius: 16px;
+  text-align: left;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🔍 Ticket Check-in</h1>
+  <p>Paste or scan ticket URL</p>
+
+  <input id="ticketUrl" placeholder="https://yourdomain.com/ticket.html?ticketId=..." />
+  <button onclick="verifyTicket()">Check Ticket</button>
+
+  <div id="result"></div>
+</div>
+
+<script>
+// ================== SUPABASE CONFIG ==================
+const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
+const SUPABASE_ANON_KEY = "PUT_YOUR_ANON_KEY_HERE";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function verifyTicket() {
+  const resultEl = document.getElementById('result');
+  resultEl.innerHTML = "Checking...";
+
+  const url = document.getElementById('ticketUrl').value.trim();
+  if (!url.includes('ticketId=')) {
+    resultEl.innerHTML = `<div class='status invalid'>❌ Invalid QR</div>`;
+    return;
+  }
+
+  const ticketId = new URL(url).searchParams.get('ticketId');
+
+  const { data, error } = await supabaseClient
+    .from('tickets')
+    .select('*')
+    .eq('id', ticketId)
+    .single();
+
+  if (error || !data) {
+    resultEl.innerHTML = `<div class='status invalid'>❌ Ticket not found</div>`;
+    return;
+  }
+
+  if (data.used) {
+    resultEl.innerHTML = `
+      <div class='status used'>⚠️ Ticket Already Used</div>
+      <div class='ticket-box'>
+        <strong>Name:</strong> ${data.full_name}<br>
+        <strong>Type:</strong> ${data.ticket_type}
+      </div>
+    `;
+    return;
+  }
+
+  // Mark ticket as used
+  await supabaseClient
+    .from('tickets')
+    .update({ used: true, used_at: new Date().toISOString() })
+    .eq('id', ticketId);
+
+  resultEl.innerHTML = `
+    <div class='status valid'>✅ Check-in Successful</div>
+    <div class='ticket-box'>
+      <strong>Name:</strong> ${data.full_name}<br>
+      <strong>Type:</strong> ${data.ticket_type}<br>
+      <strong>Quantity:</strong> ${data.quantity}
+    </div>
+  `;
+}
+</script>
+
+</body>
+</html>
