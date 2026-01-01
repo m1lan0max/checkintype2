@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Check In</title>
+<title>Check In - Fast QR Scanner</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- ✅ HTML5 QR Code Library (replacing qr-scanner) -->
-<script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
+<!-- HTML5 QR Code -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 
 <style>
 body {
@@ -17,8 +17,9 @@ body {
   color:#fff;
   font-family:system-ui;
   display:flex;
-  justify-content:center;
+  flex-direction:column;
   align-items:center;
+  justify-content:center;
   min-height:100vh;
 }
 #reader {
@@ -29,94 +30,95 @@ body {
 .result {
   margin-top:20px;
   font-weight:700;
+  text-align:center;
 }
 .success { color:#4ade80; }
 .error { color:#f87171; }
 </style>
 </head>
-
 <body>
 
-<div>
-  <h2>🎟️ Ticket Check-in</h2>
-  <div id="reader"></div>
-  <div id="result" class="result"></div>
-</div>
+<h2>🎟️ Ticket Check-in</h2>
+<div id="reader"></div>
+<div id="result" class="result"></div>
 
 <script>
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const resultEl = document.getElementById("result");
-let locked = false;
 
-// أصوات قصيرة
+const resultEl = document.getElementById("result");
+
+// Sounds
 const successSound = new Audio("https://assets.codepen.io/3/success.mp3");
 const errorSound = new Audio("https://assets.codepen.io/3/error.mp3");
 
-// ✅ Scanner using html5-qrcode
+// To prevent multiple scans in a short time
+let locked = false;
+
+function vibrate(duration) {
+    navigator.vibrate && navigator.vibrate(duration);
+}
+
+// Initialize HTML5 QR Code scanner
 const html5QrCode = new Html5Qrcode("reader");
 
-function onScanSuccess(decodedText, decodedResult) {
-    if (locked) return;
-    locked = true;
-    const ticketId = decodedText.trim();
-    console.log("SCANNED:", ticketId);
-
-    checkTicket(ticketId).finally(() => {
-        setTimeout(() => locked = false, 2000);
-    });
-}
-
-function onScanFailure(error) {
-    // ignore failures
-}
-
-// Start scanning with environment facing camera
 html5QrCode.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    onScanSuccess,
-    onScanFailure
-).catch(err => {
-    resultEl.textContent = "❌ Cannot start camera: " + err;
-    resultEl.className = "result error";
-});
+    { facingMode: "environment" }, // back camera
+    {
+        fps: 30,        // scan 30 frames per second
+        qrbox: 250      // scan area 250x250px
+    },
+    async (decodedText, decodedResult) => {
+        if (locked) return;
+        locked = true;
 
-/* ✅ Ticket validation */
+        const ticketId = decodedText.trim();
+        console.log("SCANNED:", ticketId);
+
+        await checkTicket(ticketId);
+
+        setTimeout(() => locked = false, 1500); // unlock after 1.5s
+    },
+    (errorMessage) => {
+        // console.log("Scan failed:", errorMessage); // optional
+    }
+);
+
+// ✅ Ticket validation
 async function checkTicket(ticketId) {
-  const { data, error } = await supabaseClient
-    .from("tickets")
-    .select("id, checked_in, full_name")
-    .eq("id", ticketId)
-    .single();
+    const { data, error } = await supabaseClient
+        .from("tickets")
+        .select("id, checked_in, full_name")
+        .eq("id", ticketId)
+        .single();
 
-  if(error || !data){
-    resultEl.textContent = "❌ Ticket not found";
-    resultEl.className = "result error";
-    navigator.vibrate && navigator.vibrate(300);
-    errorSound.play();
-    return;
-  }
+    if (error || !data) {
+        resultEl.textContent = "❌ Ticket not found";
+        resultEl.className = "result error";
+        vibrate(300);
+        errorSound.play();
+        return;
+    }
 
-  if(data.checked_in){
-    resultEl.textContent = "⚠️ Ticket already used";
-    resultEl.className = "result error";
-    navigator.vibrate && navigator.vibrate(600);
-    errorSound.play();
-    return;
-  }
+    if (data.checked_in) {
+        resultEl.textContent = "⚠️ Ticket already used";
+        resultEl.className = "result error";
+        vibrate(600);
+        errorSound.play();
+        return;
+    }
 
-  await supabaseClient
-    .from("tickets")
-    .update({ checked_in: true, used_at: new Date() })
-    .eq("id", ticketId);
+    await supabaseClient
+        .from("tickets")
+        .update({ checked_in: true, used_at: new Date() })
+        .eq("id", ticketId);
 
-  resultEl.textContent = `✅ Welcome ${data.full_name}`;
-  resultEl.className = "result success";
-  navigator.vibrate && navigator.vibrate(150);
-  successSound.play();
+    resultEl.textContent = `✅ Welcome ${data.full_name}`;
+    resultEl.className = "result success";
+    vibrate(150);
+    successSound.play();
 }
 </script>
 
