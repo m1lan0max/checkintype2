@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Check In - Fast QR Scanner</title>
+<title>Check In</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- HTML5 QR Code -->
+<!-- ✅ HTML5 QR CODE LIBRARY -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 
 <style>
@@ -17,25 +17,25 @@ body {
   color:#fff;
   font-family:system-ui;
   display:flex;
-  flex-direction:column;
-  align-items:center;
   justify-content:center;
+  align-items:center;
+  flex-direction: column;
   min-height:100vh;
 }
 #reader {
-  width:320px;
+  width: 320px;
   border-radius:12px;
-  overflow:hidden;
+  overflow: hidden;
 }
 .result {
   margin-top:20px;
   font-weight:700;
-  text-align:center;
 }
 .success { color:#4ade80; }
 .error { color:#f87171; }
 </style>
 </head>
+
 <body>
 
 <h2>🎟️ Ticket Check-in</h2>
@@ -50,76 +50,86 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const resultEl = document.getElementById("result");
 
-// Sounds
+// أصوات قصيرة
 const successSound = new Audio("https://assets.codepen.io/3/success.mp3");
 const errorSound = new Audio("https://assets.codepen.io/3/error.mp3");
 
-// To prevent multiple scans in a short time
 let locked = false;
 
-function vibrate(duration) {
-    navigator.vibrate && navigator.vibrate(duration);
+// ✅ Initialize QR scanner
+function onScanSuccess(decodedText, decodedResult) {
+  if (locked) return;
+  locked = true;
+
+  let ticketId;
+  try {
+    const json = JSON.parse(decodedText);
+    ticketId = json.id; // assume QR code JSON has { "id": "12345" }
+  } catch (e) {
+    showError("❌ Invalid QR code format");
+    setTimeout(() => locked = false, 2000);
+    return;
+  }
+
+  console.log("SCANNED ID:", ticketId);
+  checkTicket(ticketId).finally(() => setTimeout(() => locked = false, 2000));
 }
 
-// Initialize HTML5 QR Code scanner
-const html5QrCode = new Html5Qrcode("reader");
+// ✅ Display error
+function showError(msg) {
+  resultEl.textContent = msg;
+  resultEl.className = "result error";
+  navigator.vibrate && navigator.vibrate(300);
+  errorSound.play();
+}
 
-html5QrCode.start(
-    { facingMode: "environment" }, // back camera
-    {
-        fps: 30,        // scan 30 frames per second
-        qrbox: 250      // scan area 250x250px
-    },
-    async (decodedText, decodedResult) => {
-        if (locked) return;
-        locked = true;
-
-        const ticketId = decodedText.trim();
-        console.log("SCANNED:", ticketId);
-
-        await checkTicket(ticketId);
-
-        setTimeout(() => locked = false, 1500); // unlock after 1.5s
-    },
-    (errorMessage) => {
-        // console.log("Scan failed:", errorMessage); // optional
-    }
-);
+// ✅ Display success
+function showSuccess(msg) {
+  resultEl.textContent = msg;
+  resultEl.className = "result success";
+  navigator.vibrate && navigator.vibrate(150);
+  successSound.play();
+}
 
 // ✅ Ticket validation
 async function checkTicket(ticketId) {
-    const { data, error } = await supabaseClient
-        .from("tickets")
-        .select("id, checked_in, full_name")
-        .eq("id", ticketId)
-        .single();
+  const { data, error } = await supabaseClient
+    .from("tickets")
+    .select("id, checked_in, full_name")
+    .eq("id", ticketId)
+    .single();
 
-    if (error || !data) {
-        resultEl.textContent = "❌ Ticket not found";
-        resultEl.className = "result error";
-        vibrate(300);
-        errorSound.play();
-        return;
-    }
+  if (error || !data) {
+    showError("❌ Ticket not found");
+    return;
+  }
 
-    if (data.checked_in) {
-        resultEl.textContent = "⚠️ Ticket already used";
-        resultEl.className = "result error";
-        vibrate(600);
-        errorSound.play();
-        return;
-    }
+  if (data.checked_in) {
+    resultEl.textContent = "⚠️ Ticket already used";
+    resultEl.className = "result error";
+    navigator.vibrate && navigator.vibrate(600);
+    errorSound.play();
+    return;
+  }
 
-    await supabaseClient
-        .from("tickets")
-        .update({ checked_in: true, used_at: new Date() })
-        .eq("id", ticketId);
+  await supabaseClient
+    .from("tickets")
+    .update({ checked_in: true, used_at: new Date() })
+    .eq("id", ticketId);
 
-    resultEl.textContent = `✅ Welcome ${data.full_name}`;
-    resultEl.className = "result success";
-    vibrate(150);
-    successSound.play();
+  showSuccess(`✅ Welcome ${data.full_name}`);
 }
+
+// Start scanning
+const html5QrCode = new Html5Qrcode("reader");
+html5QrCode.start(
+  { facingMode: "environment" },
+  {
+    fps: 10,
+    qrbox: 250
+  },
+  onScanSuccess
+).catch(err => console.error("Unable to start scanner:", err));
 </script>
 
 </body>
