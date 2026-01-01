@@ -8,7 +8,7 @@
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- HTML5 QR Code Library -->
+<!-- ✅ HTML5 QR Code Scanner -->
 <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
 
 <style>
@@ -45,13 +45,9 @@ body {
 
 <script>
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
 
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
-
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const resultEl = document.getElementById("result");
 let locked = false;
 
@@ -59,7 +55,7 @@ let locked = false;
 const successSound = new Audio("https://assets.codepen.io/3/success.mp3");
 const errorSound = new Audio("https://assets.codepen.io/3/error.mp3");
 
-function onScanSuccess(decodedText, decodedResult) {
+function onScanSuccess(decodedText) {
     if (locked) return;
     locked = true;
     const ticketId = decodedText.trim();
@@ -70,29 +66,18 @@ function onScanSuccess(decodedText, decodedResult) {
 }
 
 function onScanFailure(error) {
-    // console.warn(`Scan failed: ${error}`);
+    // ignore scan failures
 }
 
-// ✅ Get available cameras and start scanning
-Html5Qrcode.getCameras().then(cameras => {
-    if (cameras && cameras.length) {
-        const cameraId = cameras[0].id; // use first camera
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start(
-            cameraId,
-            { fps: 10, qrbox: 250 },
-            onScanSuccess,
-            onScanFailure
-        ).catch(err => {
-            resultEl.textContent = "❌ Cannot start camera: " + err;
-            resultEl.className = "result error";
-        });
-    } else {
-        resultEl.textContent = "❌ No camera found";
-        resultEl.className = "result error";
-    }
-}).catch(err => {
-    resultEl.textContent = "❌ Error accessing cameras: " + err;
+// ✅ Start scanner with environment facing camera directly
+const html5QrCode = new Html5Qrcode("reader");
+html5QrCode.start(
+    { facingMode: "environment" }, // <- request back camera directly
+    { fps: 10, qrbox: 250 },
+    onScanSuccess,
+    onScanFailure
+).catch(err => {
+    resultEl.textContent = "❌ Cannot start camera: " + err;
     resultEl.className = "result error";
 });
 
