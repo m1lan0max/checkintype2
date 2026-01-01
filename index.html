@@ -73,14 +73,28 @@ function onScanFailure(error) {
     // console.warn(`Scan failed: ${error}`);
 }
 
-// Initialize scanner
-const html5QrCode = new Html5Qrcode("reader");
-html5QrCode.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    onScanSuccess,
-    onScanFailure
-);
+// ✅ Get available cameras and start scanning
+Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+        const cameraId = cameras[0].id; // use first camera
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            cameraId,
+            { fps: 10, qrbox: 250 },
+            onScanSuccess,
+            onScanFailure
+        ).catch(err => {
+            resultEl.textContent = "❌ Cannot start camera: " + err;
+            resultEl.className = "result error";
+        });
+    } else {
+        resultEl.textContent = "❌ No camera found";
+        resultEl.className = "result error";
+    }
+}).catch(err => {
+    resultEl.textContent = "❌ Error accessing cameras: " + err;
+    resultEl.className = "result error";
+});
 
 /* ✅ Ticket validation */
 async function checkTicket(ticketId) {
