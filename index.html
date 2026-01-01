@@ -8,8 +8,8 @@
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- Instascan -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/instascan/1.0.0/instascan.min.js"></script>
+<!-- HTML5 QR Code Library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
 
 <style>
 body {
@@ -20,95 +20,102 @@ body {
   justify-content:center;
   align-items:center;
   min-height:100vh;
+  flex-direction: column;
 }
-video {
+#reader {
   width:320px;
   border-radius:12px;
+  overflow:hidden;
 }
 .result {
   margin-top:20px;
   font-weight:700;
+  text-align:center;
 }
 .success { color:#4ade80; }
 .error { color:#f87171; }
 </style>
 </head>
+
 <body>
 
-<div>
-  <h2>🎟️ Ticket Check-in</h2>
-  <video id="preview"></video>
-  <div id="result" class="result"></div>
-</div>
+<h2>🎟️ Ticket Check-in</h2>
+<div id="reader"></div>
+<div id="result" class="result"></div>
 
 <script>
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 
-const video = document.getElementById("preview");
 const resultEl = document.getElementById("result");
+let locked = false;
 
-const scannedTickets = new Set();
+// أصوات قصيرة
+const successSound = new Audio("https://assets.codepen.io/3/success.mp3");
+const errorSound = new Audio("https://assets.codepen.io/3/error.mp3");
 
-const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
-
-function showResult(message, type) {
-  resultEl.textContent = message;
-  resultEl.className = `result ${type}`;
-  if (navigator.vibrate) navigator.vibrate(200);
-  if (type === "success") successSound.play();
-  else if (type === "error") errorSound.play();
-  setTimeout(() => resultEl.textContent = '', 2000);
+function onScanSuccess(decodedText, decodedResult) {
+    if (locked) return;
+    locked = true;
+    const ticketId = decodedText.trim();
+    console.log("SCANNED:", ticketId);
+    checkTicket(ticketId).finally(() => {
+        setTimeout(() => locked = false, 2000);
+    });
 }
 
+function onScanFailure(error) {
+    // console.warn(`Scan failed: ${error}`);
+}
+
+// Initialize scanner
+const html5QrCode = new Html5Qrcode("reader");
+html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScanSuccess,
+    onScanFailure
+);
+
+/* ✅ Ticket validation */
 async function checkTicket(ticketId) {
-  const { data, error } = await supabaseClient
-    .from("tickets")
-    .select("id, checked_in, full_name")
-    .eq("id", ticketId)
-    .single();
+    const { data, error } = await supabaseClient
+        .from("tickets")
+        .select("id, checked_in, full_name")
+        .eq("id", ticketId)
+        .single();
 
-  if (error || !data) {
-    showResult("❌ Ticket not found", "error");
-    return;
-  }
+    if (error || !data) {
+        resultEl.textContent = "❌ Ticket not found";
+        resultEl.className = "result error";
+        navigator.vibrate && navigator.vibrate(300);
+        errorSound.play();
+        return;
+    }
 
-  if (data.checked_in) {
-    showResult("⚠️ Ticket already used", "error");
-    return;
-  }
+    if (data.checked_in) {
+        resultEl.textContent = "⚠️ Ticket already used";
+        resultEl.className = "result error";
+        navigator.vibrate && navigator.vibrate(600);
+        errorSound.play();
+        return;
+    }
 
-  await supabaseClient
-    .from("tickets")
-    .update({ checked_in: true, used_at: new Date() })
-    .eq("id", ticketId);
+    await supabaseClient
+        .from("tickets")
+        .update({ checked_in: true, used_at: new Date() })
+        .eq("id", ticketId);
 
-  showResult(`✅ Welcome ${data.full_name}`, "success");
+    resultEl.textContent = `✅ Welcome ${data.full_name}`;
+    resultEl.className = "result success";
+    navigator.vibrate && navigator.vibrate(150);
+    successSound.play();
 }
-
-// Instascan scanner
-let scanner = new Instascan.Scanner({ video: video, mirror: false });
-scanner.addListener('scan', function (ticketId) {
-  ticketId = ticketId.trim();
-  if (scannedTickets.has(ticketId)) return;
-  scannedTickets.add(ticketId);
-  checkTicket(ticketId);
-  setTimeout(() => scannedTickets.delete(ticketId), 3000);
-});
-
-// Start camera
-Instascan.Camera.getCameras().then(function (cameras) {
-  if (cameras.length > 0) {
-    scanner.start(cameras[0]);
-  } else {
-    console.error('No cameras found.');
-  }
-}).catch(function (e) {
-  console.error(e);
-});
 </script>
 
 </body>
